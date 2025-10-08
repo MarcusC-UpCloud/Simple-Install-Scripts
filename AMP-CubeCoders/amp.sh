@@ -87,7 +87,12 @@ get_server_ip() {
 
 # Run the AMP installer and redirect output to logs
 # The installer requires a non-interactive flag to prevent it from prompting for input.
-if ! curl -fsSL getamp.sh | sudo DEBIAN_FRONTEND=noninteractive bash >> $DETAILED_LOG 2>&1; then
+# Set your desired AMP username and password here
+AMP_USER="Admin"
+AMP_PASS="ChangeMePassword"
+
+# The installer command with all non-interactive arguments
+if ! curl -fsSL getamp.sh | sudo DEBIAN_FRONTEND=noninteractive bash -s -- +Core.Login.Username "$AMP_USER" +Core.Login.Password "$AMP_PASS" +Core.AMP.AgreedToTOS True >> $DETAILED_LOG 2>&1; then
     handle_error "AMP installation script"
 fi
 
