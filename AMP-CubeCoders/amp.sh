@@ -1,123 +1,63 @@
 #!/bin/bash
 
 # === AMP (CubeCoders) Auto-Installation Init Script ===
-# This script automatically installs AMP during server initialization
 
-# Enable logging
+# --- Script Configuration ---
 LOG_FILE="/var/log/amp-install.log"
 DETAILED_LOG="/var/log/amp-install-detailed.log"
+# !!! IMPORTANT !!! Set your desired AMP username and password here
+AMP_USER="YourAdminUsername"
+AMP_PASS="YourVerySecurePassword123"
 
-# Start logging
+# --- Start Logging ---
 {
     echo "===== AMP Installation Started ====="
     echo "Date: $(date)"
-    echo "Hostname: $(hostname)"
-    echo ""
 } | tee -a $LOG_FILE $DETAILED_LOG
 
-# Create initial "Installing" MOTD
-create_installing_motd() {
-    cat > /etc/update-motd.d/91-amp-installing << 'EOF'
-#!/bin/bash
-echo "----------------------------------------"
-echo -e "\033[0;33m📦 AMP installation in progress...\033[0m"
-echo "----------------------------------------"
-echo ""
-echo "The automated installation of AMP is currently running."
-echo "This typically takes 5-10 minutes depending on your server specs."
-echo ""
-echo "To check installation progress:"
-echo "  cat /var/log/amp-install.log"
-echo ""
-echo "To view detailed logs:"
-echo "  cat /var/log/amp-install-detailed.log"
-echo "----------------------------------------"
-EOF
-    chmod +x /etc/update-motd.d/91-amp-installing
-}
-
-# Create initial "Installing" MOTD right away
-create_installing_motd
-
-# Create a function to handle errors
+# --- Function to handle errors ---
 handle_error() {
-    {
-        echo "[ERROR] An error occurred during installation at step: $1"
-        echo "Please check $DETAILED_LOG for more details"
-        echo ""
-    } | tee -a $LOG_FILE $DETAILED_LOG
-    
-    # Create a failure notice in MOTD
-    cat > /etc/update-motd.d/99-amp-install-failed << 'EOF'
-#!/bin/bash
-echo "----------------------------------------"
-echo -e "\033[0;31mAMP installation failed\033[0m"
-echo "Please check the installation logs for details:"
-echo "- /var/log/amp-install.log (summary)"
-echo "- /var/log/amp-install-detailed.log (detailed)"
-echo "----------------------------------------"
-EOF
-    chmod +x /etc/update-motd.d/99-amp-install-failed
-    
+    echo "[ERROR] An error occurred during step: $1" | tee -a $LOG_FILE
+    echo "Please check $DETAILED_LOG for more details." | tee -a $LOG_FILE
     exit 1
 }
 
-# Function to get the server's IP addresses
-get_server_ip() {
-    # Try to get the public IP first
-    PUBLIC_IP=$(curl -s -4 https://ifconfig.io || curl -s -4 https://api.ipify.org || curl -s -4 https://icanhazip.com)
-    
-    # Get the private IP as backup
-    PRIVATE_IP=$(hostname -I | awk '{print $1}')
-    
-    # If public IP is available, use it; otherwise use private IP
-    if [[ -n "$PUBLIC_IP" && "$PUBLIC_IP" != "127.0.0.1" ]]; then
-        echo "$PUBLIC_IP"
-    else
-        echo "$PRIVATE_IP"
-    fi
-}
-
-# Step 1: Install AMP
+# --- STEP 1: Install the AMP Core Tools ---
 {
-    echo "[STEP 1] Installing AMP using the official CubeCoders installer script..."
-    echo "This may take several minutes. Please be patient."
     echo ""
+    echo "[STEP 1] Installing AMP core tools using the official installer..."
+    echo "This step installs the 'ampinstmgr' utility."
 } | tee -a $LOG_FILE $DETAILED_LOG
 
-# Run the AMP installer and redirect output to logs
-# The installer requires a non-interactive flag to prevent it from prompting for input.
-# Set your desired AMP username and password here
-AMP_USER="Admin"
-AMP_PASS="ChangeMePassword"
-
-# The installer command with all non-interactive arguments
-if ! curl -fsSL getamp.sh | sudo DEBIAN_FRONTEND=noninteractive bash -s -- +Core.Login.Username "$AMP_USER" +Core.Login.Password "$AMP_PASS" +Core.AMP.AgreedToTOS True >> $DETAILED_LOG 2>&1; then
-    handle_error "AMP installation script"
+# Run the installer. It should not ask for input with this method.
+if ! curl -fsSL getamp.sh | sudo DEBIAN_FRONTEND=noninteractive bash >> $DETAILED_LOG 2>&1; then
+    handle_error "Core Tools Installation (getamp.sh)"
 fi
 
+echo "[STEP 1] Core tools installed successfully." | tee -a $LOG_FILE $DETAILED_LOG
+
+# --- STEP 2: Create and Configure the AMP Instance ---
 {
-    echo "[STEP 1] AMP installation completed successfully."
     echo ""
+    echo "[STEP 2] Creating the 'ADS01' AMP instance..."
+    echo "This step creates the instance and the admin user."
 } | tee -a $LOG_FILE $DETAILED_LOG
 
-# Step 2: Check if AMP is running
+# Use the ampinstmgr tool to create the instance non-interactively
+# This command is run as the 'amp' user, which was created in Step 1.
+if ! sudo -u amp ampinstmgr CreateInstance +Core.Login.Username "$AMP_USER" +Core.Login.Password "$AMP_PASS" +Core.AMP.AgreedToTOS True ADS01 0.0.0.0 8080 LicenceKeyHere >> $DETAILED_LOG 2>&1; then
+    handle_error "Instance Creation (ampinstmgr)"
+fi
+
+echo "[STEP 2] Instance 'ADS01' created and configured successfully." | tee -a $LOG_FILE $DETAILED_LOG
+
+# --- Final Summary ---
+SERVER_IP=$(curl -s -4 https://ifconfig.io)
 {
-    echo "[STEP 2] Verifying AMP service is running..."
+    echo ""
+    echo "==============================="
+    echo "✅ AMP Installation Complete!"
+    echo "Access your AMP panel at: http://$SERVER_IP:8080"
+    echo "Username: $AMP_USER"
+    echo "==============================="
 } | tee -a $LOG_FILE $DETAILED_LOG
-
-# Wait for services to fully start
-sleep 20
-
-# Check if the ampinstmgr service is active
-if systemctl is-active --quiet ampinstmgr; then
-    {
-        echo "[STEP 2] Verified the 'ampinstmgr' service is active."
-        echo ""
-    } | tee -a $LOG_FILE $DETAILED_LOG
-else
-    {
-        echo "[ERROR] The 'ampinstmgr' service was not found or is not active."
-        echo "This might indicate an issue with the installation process."
-        echo ""
-    } | tee -a
