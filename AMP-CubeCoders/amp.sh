@@ -87,7 +87,7 @@ get_server_ip() {
 
 # Run the AMP installer and redirect output to logs
 # The installer requires a non-interactive flag to prevent it from prompting for input.
-if ! bash <(curl -fsSL getamp.sh) install-noninteractive >> $DETAILED_LOG 2>&1; then
+if ! curl -fsSL getamp.sh | sudo DEBIAN_FRONTEND=noninteractive bash >> $DETAILED_LOG 2>&1; then
     handle_error "AMP installation script"
 fi
 
